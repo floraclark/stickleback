@@ -1,0 +1,300 @@
+---
+title: "Supplementary File"
+author: ''
+date: "17/07/2023"
+output:
+  html_document:
+    toc: TRUE
+  pdf_document: default
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+# Set the working directory to the directory where the R Markdown file is located
+knitr::opts_knit$set(root.dir = normalizePath("/Users/floraclark/Library/CloudStorage/OneDrive-Personal/Oxford/Year 4/Fourth Year Project/Statistics"))
+```
+
+# **Background information**
+
+This file contains all the data analysis associated with the following manuscript:
+
+**Sticklebacks etc**
+
+Authors: Flora Clark, Cait Newport etc etc 
+
+Created July 2023
+
+To re-run any code in this file, first download and save the data in ___.
+
+# **Initialize workspace**
+
+Load the required packages.
+
+```{r packages, echo = TRUE, include = TRUE, eval = TRUE, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(png)
+library(RColorBrewer)
+library(gridExtra)
+library(multcomp)
+library(lme4)
+library(emmeans)
+library(vcd)
+library(MASS)
+library(fBasics)
+```
+
+# **Data Filtering**
+
+The following code chunk was used to filter the outputs of the video files from MATLAB. This code was used to remove any points that were more than 100 points away from the previous point on the X or Y axis. That filtered data was then saved as a .txt file and as a .png file. The total distances covered by all fish in each maze condition were then calculated and saved as a .csv file.
+
+``` {r filter, echo = TRUE , include = TRUE, eval = FALSE}
+# Create a vector of trial IDs
+ maze_name <- "BLANK"
+# maze_name <- "GRAVEL"
+# maze_name <- "GREEN"
+ maze_modifier <- ""
+# maze_modifier <- "G"
+# maze_modifier <- "R"
+
+fish_id_nos <-1:10 #if this is changed, revert to 1:10 
+trial_id_nos <- 1:20 #if this is changed, revert to 1:20
+
+base_directory <- "//fish videos//"
+
+total_distance_df <- data.frame(fish_id = numeric(), trial_id = numeric(), total_distance = numeric())
+
+# Loop through each fish ID
+for (fish_id_no in fish_id_nos) {
+  
+  # Loop through each trial ID
+  for (trial_id_no in trial_id_nos) {
+    base_file_name <- paste0(base_directory, "/", maze_name, " MAZE/FishID_", fish_id_no, "_TrialID_", trial_id_no, maze_modifier)
+    base_out_name <- paste0(maze_name, "_F_", fish_id_no, "_T_", trial_id_no)
+    
+    # Create file names for the x.txt and .txt files for the current trial
+    xx_file <- paste0(base_file_name, "xx.txt")
+    x_file <- paste0(base_file_name, "x.txt")
+    file <- paste0(base_file_name, ".txt")
+    
+    if(!file.exists(file)) {
+      print(paste0(base_out_name, ": Failed, excluding..."))
+      next
+    }
+    
+    # Read data for normal file
+    data0 <- read.table(file, header = TRUE)
+
+    if (file.exists(x_file)) {
+      data1 <- read.table(x_file, header = TRUE)
+      data0 <- rbind(data0, data1)
+      
+      if (file.exists(xx_file)) {
+        data2 <- read.table(xx_file, header = TRUE)
+        data0 <- rbind(data0, data2)
+      }
+    }
+    
+    data <- data0
+    
+    # Filter the data set
+   filter_data <- data %>% filter(Y_coord >= 100, Y_coord <= 575, X_coord <= 755, X_coord >= 50) %>% filter_points_opt()
+    #filter_data <- data %>%  filter(X_coord < 500 | X_coord > 600 | Y_coord < 100 | Y_coord > 200) %>% filter_points_opt()
+   
+    # Save the filtered data set as a .txt file
+    write.table(filter_data, file = paste0(base_out_name, "_filtered_data.txt"), sep = "\t", row.names = FALSE)
+  
+    # Plot the filtered data set using ggplot
+    ggplot(filter_data, aes(x = X_coord, y = Y_coord)) + 
+      geom_point(colour = "black", size = 3) +
+      coord_cartesian(xlim = c(0, 800), ylim = c(771, -100)) +
+      geom_path(aes(x = X_coord, y = Y_coord), colour = "red", size = 1) +
+      xlab(" ") + ylab(" ") +
+      scale_y_reverse()
+  
+    # Save the plot as an image file
+    ggsave(paste0(base_out_name, "_plot.png"), width = 6, height = 6)
+    
+    
+    # Calculate the total distance traveled by the fish
+    total_distance <- 0
+    for (i in 1:(nrow(filter_data)-1)) {
+      x1 <- filter_data$X_coord[i]
+      y1 <- filter_data$Y_coord[i]
+      x2 <- filter_data$X_coord[i+1]
+      y2 <- filter_data$Y_coord[i+1]
+      distance <- sqrt((x2-x1)^2 + (y2-y1)^2)
+      total_distance <- total_distance + distance
+    }
+    total_distance <- total_distance/1000
+  
+    # Print the total distance and add it to a data frame
+    print(paste0(base_out_name, ": ", total_distance))
+
+    total_distance_df <- rbind(total_distance_df, data.frame(fish_id = fish_id_no, trial_id = trial_id_no, total_distance = total_distance))
+  }
+}
+
+# Save the total distance data frame as a csv file
+write.csv(total_distance_df, file = "total_distance_blank.csv", row.names = FALSE)
+
+```
+
+
+
+# **Experiment Data**
+
+``` {r load data, echo = TRUE , include = FALSE, eval = TRUE}
+allmaze <- (read.csv("allmaze.csv", header = TRUE, na.strings = "NA"))
+
+#R automatically puts Fish 10 after Fish 1, so the order needs to be changed
+order <- c("FISH 1", "FISH 2", "FISH 3", "FISH 4", "FISH 5", "FISH 6", "FISH 7", "FISH 8", "FISH 9", "FISH 10")
+allmaze$Fish_ID <- factor(allmaze$Fish_ID, levels = order)
+
+#Creating a new data set that contains all of the fish data without fishes 7 and 9, which frequently jumped out of the arena.
+allmaze_nojump <- subset(allmaze, !(Fish_ID %in% c("FISH 7", "FISH 9")))
+
+```
+
+## Completion
+
+### Loading the data
+```{r completions data, echo = TRUE, include = TRUE, fig.height = 6, fig.width = 9, fig.align = 'center'}
+fish_completions <- read.csv("maze_comp.csv", header = TRUE, na.strings = "NA")
+
+fish_completions2 <- data.frame(category = c( "Blank maze", "Blank maze","Blank maze","Blank maze","Blank maze","Blank maze","Blank maze", "Gravel maze", "Gravel maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze","Green maze"),
+    value = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    color = c("Fish 4", "Fish 6", "Fish 7", "Fish 7", "Fish 8", "Fish 9", "Fish 9", "Fish 8", "Fish 10", "Fish 1", "Fish 1", "Fish 1", "Fish 1", "Fish 1", "Fish 4", "Fish 4", "Fish 4", "Fish 4", "Fish 6", "Fish 8", "Fish 8", "Fish 8", "Fish 8", "Fish 8"))
+
+#Define a color palette with distinguishable colors
+my_palette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+```
+
+### Completions bar chart (Figure ___)
+```{r completions graph, echo = TRUE, include = TRUE, fig.height = 6, fig.width = 9, fig.align = 'center'}
+#Plot the graph
+ggplot(fish_completions2, aes(x = category, y = value, fill = color)) +
+  geom_bar(stat = "identity") + 
+  labs(fill = "Fish ID", title = "Number of maze completions in each experimental condition", x = "Experimental condition", y = "Number of completions") +
+  scale_fill_manual(
+    values = my_palette,
+    limits = c("Fish 1", "Fish 4", "Fish 6", "Fish 7", "Fish 8", "Fish 9", "Fish 10")
+  )
+```
+
+## Decision point
+
+### Loading the data
+```{r decision point data, echo = TRUE, include = TRUE}
+fish_data <- read.csv("Trajectories-for-csv.csv")
+fish_data <- na.omit(fish_data)
+fish_no_jump <- subset(fish_data, !(Fish_ID %in% c(7, 9)))
+```
+
+### Decision point LMM
+```{r decision point lmm, echo = TRUE, include = TRUE}
+# Fit an LMM with decision point as the dependent variable, maze type as the independent variable and fish ID included as a random effect
+lmm_dpoint <- lmer(D_Point_Num ~ Maze + (1 | Fish_ID), data = fish_no_jump)
+summary(lmm_dpoint)
+```
+
+### Decision point LMM Tukey Test
+```{r decision point tukey, echo = TRUE, include = TRUE}
+# TUKEY TEST
+# Perform Tukey's HSD test with Holm's method for adjusting p-values
+tukey_results <- glht(lmm_dpoint, linfct = mcp(Maze = "Tukey"))
+tukey_results_summary <- summary(tukey_results, test = adjusted("holm"))
+
+# Print the Tukey HSD results with adjusted p-values
+tukey_results_summary
+```
+
+### Decision point histogram (Figure __)
+```{r decision point histogram, echo = TRUE, include = TRUE, message = FALSE, fig.height = 4, fig.width = 9, fig.align = 'center'}
+#Three histograms of different decisions points reached in each maze condition 
+ggplot(fish_no_jump, aes(x = D_Point_Num, fill = Maze)) +
+  geom_histogram(binwidth = 1)+
+  facet_wrap(~ Maze, ncol = 3) +
+ # xlim(0,5) +
+  labs(x = "Decision point reached", y = "Count") +
+  ggtitle("Maximum decision point reached in each maze condition") +
+  scale_fill_manual(values = c("white", "gray", "springgreen4"),
+                    labels = c("Blank", "Gravel", "Green")) +
+  theme(plot.caption = element_text(hjust = 0)) +
+  scale_x_continuous(breaks = seq(0, 5, by = 1))
+```
+
+## Trajectory
+
+### Loading the data
+```{r trajectory data, echo = TRUE, include = TRUE, message = FALSE}
+#Creating a new column in the data set of trajectories that are rounded to the nearest whole number
+fish_no_jump <- fish_no_jump %>% mutate(Traj_round = round(Trajectory))
+```
+
+### Trajectory GLMM
+```{r trajectory glmm, echo = TRUE, include = TRUE, message = FALSE}
+#Running a GLMM where trajectory is the dependent variable, maze condition and decision point are independent variables and fish ID and trial ID are included as random effects
+glmm_traj <- glmer(Traj_round ~ Maze + D_Point + (1|Fish_ID) + (1|Trial_ID),
+               data = fish_no_jump,
+               family = poisson)
+summary(glmm_traj)
+```
+
+### Trajectory GLMM Tukey Test
+```{r trajectory glmm tukey, echo = TRUE, include = TRUE, message = FALSE}
+# TUKEY TEST
+# Perform Tukey's HSD test with Holm's method for adjusting p-values
+summary(glht(glmm_traj, linfct= mcp (Maze="Tukey")),test=adjusted("holm"))
+summary(glht(glmm_traj, linfct= mcp (D_Point="Tukey")),test=adjusted("holm"))
+```
+
+### Trajectory box plot (Figure ___)
+```{r trajectory box plot, echo = TRUE, include = TRUE, message = FALSE, fig.height = 6, fig.width = 9, fig.align = 'center'}
+
+ggplot(fish_no_jump, aes(x = Maze, y = Trajectory, fill = Maze)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 2, alpha = 0.3) +
+  labs(x = "Maze", y = "Trajectory") +
+  ggtitle("A box plot showing the total distance covered in each maze condition") +
+  scale_fill_manual(values = c("white", "gray", "springgreen4"),
+                    labels = c("Blank", "Gravel", "Green")) +
+  scale_x_discrete(labels = c("Blank", "Gravel", "Green")) +
+  theme(plot.caption = element_text(hjust = 0))
+```
+
+## Entry Latency
+
+### Entry Latency LMM
+```{r latency lmm, echo = TRUE , include = TRUE}
+
+#Running a LMM of entry latency in each maze condition
+lmm_lat <- lmer(Latency ~ group + (1|Fish_ID),
+                   data = allmaze_nojump)
+summary(lmm_lat)
+```
+
+### Entry latency LMM Tukey Test
+```{r latency lmm tukey, echo = TRUE , include = TRUE}
+# TUKEY TEST
+# Perform Tukey's HSD test with Holm's method for adjusting p-values
+tukey_results_lat <- glht(lmm_lat, linfct = mcp(group = "Tukey"))
+tukey_results_summary_lat <- summary(tukey_results_lat, test = adjusted("holm"))
+
+# Print the Tukey HSD results with adjusted p-values
+tukey_results_summary_lat
+```
+
+### Entry latency boxplot (Figure ___)
+```{r latency plot, echo = TRUE, include = TRUE, message = FALSE, warning = FALSE, fig.height = 6, fig.width = 9, fig.align = 'center'}
+ggplot(allmaze, aes(x = factor(Fish_ID), y = Latency, fill = group)) +
+  stat_summary(fun = mean, position = position_dodge(width = 0.9)) +
+  geom_boxplot(width = 0.7, position = position_dodge(width = 0.9)) +
+  labs(title = "Average entry latency period for each fish in the three maze conditions", x = "Fish ID", y = "Latency (s)") +
+  scale_fill_manual(values = c("white", "gray", "springgreen4"),
+                    labels = c("Blank", "Gravel", "Green"),
+                    name = "Maze") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
